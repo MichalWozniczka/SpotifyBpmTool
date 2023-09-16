@@ -43,10 +43,16 @@ export class SpotifyWebAuthTokenManager
     
     async GenerateAuthTokenRequestAsync()
     {
+        const scopes = [ "user-library-read", 
+            "user-modify-playback-state",
+            "user-read-playback-state" ]; 
+
         const authRequestOptions = {
             usePKCE: true,
             responseType: AuthSession.ResponseType.Code,
             clientId: SpotifyConfig.ClientId,
+            scopes: scopes,
+            prompt: AuthSession.Prompt.None,
             redirectUri: AuthSession.makeRedirectUri(),
         };
         

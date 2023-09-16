@@ -1,11 +1,13 @@
 import { SpotifyConfig } from "./spotifyweb.config";
+import { SpotifyWebAuthTokenManager } from "./SpotifyWebAuthTokenManager";
 import * as AuthSession from "expo-auth-session";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export class SpotifyWebAccessTokenManager
 {
-    async InitSpotifyWebAccessTokenManagerAsync(spotifyWebAuthToken)
+    async InitSpotifyWebAccessTokenManagerAsync()
     {
-        this.AuthTokenManager = spotifyWebAuthToken;
+        AsyncStorage.clear();
         await this.RefreshAccessTokenAsync();
     }
 
@@ -22,33 +24,67 @@ export class SpotifyWebAccessTokenManager
     IsExpired()
     {
         const currentEpoch = Math.round(new Date().getTime() / 1000);
-        console.log(this.ExpirationTime);
-        console.log(currentEpoch);
         return this.ExpirationTime < currentEpoch;
     }
 
     async RefreshAccessTokenAsync()
     {
-        const authToken = await this.AuthTokenManager.GetAuthTokenAsync();
+        let accessTokenResponse;
+
+        if(!this.RefreshToken)
+        {
+            this.RefreshToken = await AsyncStorage.getItem(this.RefreshTokenStorageKey);
+        }
+
+        if(!this.RefreshToken)
+        {
+            accessTokenResponse = await this.GetAccessTokenWithAuthTokenManagerAsync(); 
+        }
+        else
+        {
+            const refreshRequestOptions = {
+                clientId: SpotifyConfig.ClientId, 
+                refreshToken: this.RefreshToken, 
+                extraParams: {
+                    grant_type: "refresh_token",
+                }
+            }
+            
+            const discovery = { tokenEndpoint: SpotifyConfig.TokenUrl };
+
+            accessTokenResponse = await AuthSession.refreshAsync(refreshRequestOptions, discovery).catch(async () => await this.GetAccessTokenWithAuthTokenManagerAsync());
+        }
+
+        this.AccessToken = accessTokenResponse.accessToken;
+        this.ExpirationTime = accessTokenResponse.issuedAt + accessTokenResponse.expiresIn;
+
+        this.RefreshToken = accessTokenResponse.refreshToken; 
+        await AsyncStorage.setItem(this.RefreshTokenStorageKey, this.RefreshToken);
+    }
+
+    async GetAccessTokenWithAuthTokenManagerAsync()
+    {
+        let authTokenManager = new SpotifyWebAuthTokenManager();
+        await authTokenManager.InitSpotifyWebAuthTokenManagerAsync();
+
+        const authToken = await authTokenManager.GetAuthTokenAsync();
         const accessRequestOptions = {
             clientId: SpotifyConfig.ClientId,
             code: authToken,
             redirectUri: AuthSession.makeRedirectUri(),
             extraParams: {
                 grant_type: "authorization_code",
-                code_verifier: await this.AuthTokenManager.GetCodeVerifierAsync(),
+                code_verifier: await authTokenManager.GetCodeVerifierAsync(),
             },
         };
         
         const discovery = { tokenEndpoint: SpotifyConfig.TokenUrl };
         
-        let accessTokenResponse = await AuthSession.exchangeCodeAsync(accessRequestOptions, discovery);
-
-        this.AccessToken = accessTokenResponse.accessToken;
-        this.ExpirationTime = accessTokenResponse.issuedAt + accessTokenResponse.expiresIn;
+        return await AuthSession.exchangeCodeAsync(accessRequestOptions, discovery);
     }
 
-    AuthTokenManager;
     AccessToken;
     ExpirationTime;
+    RefreshToken;
+    RefreshTokenStorageKey = "RefreshTokenStorageKey";
 }
