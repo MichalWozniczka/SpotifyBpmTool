@@ -4,18 +4,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export class SpotifyWebAuthTokenManager
 {
-    async InitSpotifyWebAuthTokenManagerAsync(loadFromStorage)
+    async InitSpotifyWebAuthTokenManagerAsync()
     {
-        if (loadFromStorage)
-        {
-            this.AuthToken = await AsyncStorage.getItem(this.AuthTokenStorageKey);
-            this.CodeVerifier = await AsyncStorage.getItem(this.CodeVerifierStorageKey);
-        }
-
-        if(!this.AuthToken || !this.CodeVerifier)
-        {
-            await this.RefreshAuthTokenAsync();
-        }
+        console.log("Initializing auth token manager");
+        return await this.RequestAuthTokenAsync();
     }
 
     async GetAuthTokenAsync()
@@ -28,24 +20,38 @@ export class SpotifyWebAuthTokenManager
         return this.CodeVerifier;
     }
 
-    async RefreshAuthTokenAsync()
+    async RequestAuthTokenAsync()
     {
-        const request = await this.GenerateAuthTokenRequestAsync();
+        console.log("Attempting auth token request");
+        const request = await this.GenerateAuthTokenRequestAsync().catch(() => null);
 
-        const result = await request.promptAsync({ useProxy: true });
+        console.log("Prompting user");
+        const result = await request?.promptAsync({ useProxy: true });
 
+        if(!result || !!result.error || result.type == "dismiss")
+        {
+            console.log("Failed to init auth token");
+            await AsyncStorage.removeItem(this.AuthTokenStorageKey);
+            await AsyncStorage.removeItem(this.CodeVerifierStorageKey);
+            return false;
+        }
+
+        console.log("Prompt succeeded. Initialized auth token");
         this.AuthToken = result.params.code;
         await AsyncStorage.setItem(this.AuthTokenStorageKey, this.AuthToken);
 
         this.CodeVerifier = request.codeVerifier;
         await AsyncStorage.setItem(this.CodeVerifierStorageKey, this.CodeVerifier);
+
+        return true;
     }
     
     async GenerateAuthTokenRequestAsync()
     {
         const scopes = [ "user-library-read", 
             "user-modify-playback-state",
-            "user-read-playback-state" ]; 
+            "user-read-playback-state",
+            "user-read-private" ]; 
 
         const authRequestOptions = {
             usePKCE: true,
