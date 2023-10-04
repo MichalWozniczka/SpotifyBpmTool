@@ -8,3 +8,30 @@ export class LibraryItem
         this.imageUrl = imageUrl;
     }
 }
+
+export class Album extends LibraryItem
+{
+    constructor(name, id, imageUrl, artists)
+    {
+        super("Album", name, id, imageUrl);
+        this.artists = artists;
+    }
+}
+
+export class Playlist extends LibraryItem
+{
+    constructor(name, id, imageUrl, owner)
+    {
+        super("Playlist", name, id, imageUrl);
+        this.owner = owner;
+    }
+}
+
+export class Track extends LibraryItem
+{
+    constructor(name, id, imageUrl, artists)
+    {
+        super("Track", name, id, imageUrl);
+        this.artists = artists;
+    }
+}

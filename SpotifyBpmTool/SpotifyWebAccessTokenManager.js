@@ -7,7 +7,6 @@ export class SpotifyWebAccessTokenManager
 {
     async InitSpotifyWebAccessTokenManagerAsync(refreshOnly = false)
     {
-        AsyncStorage.clear();
         console.log("Initializing access token manager");
         this.Initialized = await this.RefreshOrInitAccessTokenAsync(refreshOnly);
         return this.Initialized;

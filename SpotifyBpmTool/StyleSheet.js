@@ -28,13 +28,9 @@ export const styles = StyleSheet.create ({
         borderWidth: 1,
         borderColor: 'rgba(158, 150, 150, 0)',
     },
-    filterLibraryTextColor: {
+    filterLibraryText: {
         color: "white",
         fontSize: 10,
         textAlign: "center",
-    },
-    listItem: {
-        flex: 1,
-        color: "black",
     }
 });

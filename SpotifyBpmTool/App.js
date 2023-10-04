@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Text, View, Pressable, SectionList } from "react-native";
+import { Text, View, Image, Pressable, SectionList } from "react-native";
 import { SpotifyWebManager } from "./SpotifyWebManager";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { styles } from "./StyleSheet";
+import { LibraryItem } from "./LibraryItem";
 
 const Stack = createNativeStackNavigator();
 const spotifyWebManager = new SpotifyWebManager();
@@ -81,14 +82,20 @@ function PlaylistScreen({ navigation, route })
 
 function LibrarySelectScreen({ navigation, route })
 {
+    const albumsName = "Albums";
     const [albums, setAlbums] = useState([]);
     const [albumsFetched, setAlbumsFetched] = useState(false);
+    const [albumsToggled, setAlbumsToggled] = useState(true);
 
-    const [playlists, setplaylists] = useState([]);
+    const playlistsName = "Playlists";
+    const [playlists, setPlaylists] = useState([]);
     const [playlistsFetched, setPlaylistsFetched] = useState(false);
+    const [playlistsToggled, setPlaylistsToggled] = useState(true);
 
-    const [tracks, settracks] = useState([]);
+    const tracksName = "Tracks";
+    const [tracks, setTracks] = useState([]);
     const [tracksFetched, setTracksFetched] = useState(false);
+    const [tracksToggled, setTracksToggled] = useState(true);
 
     async function GetAlbums()
     {
@@ -98,12 +105,30 @@ function LibrarySelectScreen({ navigation, route })
     
     async function GetPlaylists()
     {
-        
+        setPlaylists(await spotifyWebManager.GetUsersSavedPlaylistsAsync());
+        setPlaylistsFetched(true);
     }
     
     async function GetTracks()
     {
-        
+        setTracks(await spotifyWebManager.GetUsersSavedTracksAsync());
+        setTracksFetched(true);
+    }
+
+    function Toggle(name)
+    {
+        switch(name)
+        {
+            case albumsName:
+                setAlbumsToggled(!albumsToggled);
+                break;
+            case playlistsName:
+                setPlaylistsToggled(!playlistsToggled);
+                break;
+            case tracksName:
+                setTracksToggled(!tracksToggled);
+                break;
+        }
     }
 
     useEffect(() => {
@@ -111,39 +136,48 @@ function LibrarySelectScreen({ navigation, route })
         {
             GetAlbums();
         }
+        if(!playlistsFetched)
+        {
+            GetPlaylists();
+        }
+        if(!tracksFetched)
+        {
+            GetTracks();
+        }
     }, []);
 
     return (
-        <View>
-            <Text>Select Library</Text>
-            <View style={{flexDirection: "row"}}>
-                <FilterLibraryButton name="Albums" filterFunction={GetAlbums}/>
-                <FilterLibraryButton name="Playlists" filterFunction={GetPlaylists}/>
-                <FilterLibraryButton name="Tracks" filterFunction={GetTracks}/>
+        <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
+            <View style={{height: 20}}/>
+            <View style={{margin: 20, padding: 10}}>
+                <Text style={{color: "white", fontSize: 30}}>Select Library</Text>
+                <View style={{flexDirection: "row"}}>
+                    <FilterLibraryButton name={albumsName} toggleFunction={Toggle} isToggled={albumsToggled}/>
+                    <FilterLibraryButton name={playlistsName} toggleFunction={Toggle} isToggled={playlistsToggled}/>
+                    <FilterLibraryButton name={tracksName} toggleFunction={Toggle} isToggled={tracksToggled}/>
+                </View>
+                <SectionList 
+                    sections={[
+                        { title: "Albums", data: albumsToggled ? albums : []},
+                        { title: "Playlists", data: playlistsToggled ? playlists : []},
+                        { title: "Tracks", data: tracksToggled ? tracks : []},
+                    ]}
+                    renderItem={({ item }) => <LibrarySelectItem libraryItem={item}/>}
+                    renderSectionHeader={({section}) => (
+                    <Text style={{color: "white", fontSize: 20}}>{section.title}</Text>
+                    )}
+                    keyExtractor={item => `libraryItem-${item.id}`}
+                />
             </View>
-            <SectionList 
-                sections={[
-                    { title: "Albums", data: albums},
-                    { title: "Playlists", data: playlists},
-                    { title: "Tracks", data: tracks},
-                ]}
-                renderItem={({ item }) => <LibrarySelectItem libraryItem={item}/>}
-                renderSectionHeader={({section}) => (
-                  <Text style={styles.sectionHeader}>{section.title}</Text>
-                )}
-                keyExtractor={item => `basicListEntry-${item.id}`}
-
-            />
         </View>
     );
 }
 
-function FilterLibraryButton({ name, filterFunction })
+function FilterLibraryButton({ name, toggleFunction, isToggled })
 {
-    const [isSelected, setIsSelected] = useState(false);
     return (
-        <Pressable style={styles.filterLibraryButton} onPress={() => filterFunction()}>
-            <Text style={styles.filterLibraryTextColor}>{name}</Text>
+        <Pressable style={styles.filterLibraryButton} onPress={() => toggleFunction(name)}>
+            <Text style={styles.filterLibraryText}>{name}</Text>
         </Pressable>
     );
 }
@@ -151,9 +185,16 @@ function FilterLibraryButton({ name, filterFunction })
 function LibrarySelectItem({ libraryItem })
 {
     const [isSelected, setIsSelected] = useState(false);
+    const detailString = libraryItem.type + " • " +  (libraryItem.type == "Playlist" ? libraryItem.owner : libraryItem.artists.join(", "));
     return (
-        <Pressable style={styles.listItem} onPress={() => setIsSelected(!isSelected)}>
-            <Text>{libraryItem.name}</Text>
+        <Pressable onPress={() => setIsSelected(!isSelected)}>
+            <View style={{margin: 5, flexDirection: "row"}}>
+                <Image style={{width: 70, height: 70, borderRadius: 5}} source={{uri: libraryItem.imageUrl}}/>
+                <View style={{padding: 10, flexDirection: "column"}}>
+                    <Text style={{padding: 5, color: "white", fontSize: 15, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{libraryItem.name}</Text>
+                    <Text style={{padding: 5, color: "white", fontSize: 10, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{detailString}</Text>
+                </View>
+            </View>
         </Pressable>
     )
 }

@@ -1,6 +1,8 @@
 import { SpotifyConfig } from "./spotifyweb.config"; 
 import { SpotifyWebAccessTokenManager } from "./SpotifyWebAccessTokenManager";
-import { Album } from "./Album"
+import { Album } from "./LibraryItem"
+import { Playlist } from "./LibraryItem"
+import { Track } from "./LibraryItem"
 
 export class SpotifyWebManager
 {
@@ -10,9 +12,10 @@ export class SpotifyWebManager
         let remaining = 0;
         let limit = 50;
         let offset = 0;
+        let countryCode = await this.GetCountryCodeAsync();
         do
         {
-            let response = await this.ExecuteWebRequestAsync("/me/albums?limit=" + limit + "&offset=" + offset + "&market=" + this.countryCode, "GET");
+            let response = await this.ExecuteWebRequestAsync("/me/albums?limit=" + limit + "&offset=" + offset + "&market=" + countryCode, "GET");
             let responseJson = await response.json();
 
             let currentAlbums = responseJson.items.map(responseItem => 
@@ -28,6 +31,59 @@ export class SpotifyWebManager
         } while (remaining > 0);
 
         return albums;
+    }
+
+    async GetUsersSavedPlaylistsAsync()
+    {
+        let playlists = [];
+        let remaining = 0;
+        let limit = 50;
+        let offset = 0;
+        do
+        {
+            let response = await this.ExecuteWebRequestAsync("/me/playlists?limit=" + limit + "&offset=" + offset, "GET");
+            let responseJson = await response.json();
+
+            let currentPlaylists = responseJson.items.map(responseItem => 
+                new Playlist(responseItem.name, 
+                    responseItem.id, 
+                    responseItem.images[0]?.url,
+                    responseItem.owner));
+
+            playlists = playlists.concat(currentPlaylists);
+            offset += limit;
+            remaining = responseJson.total - (limit * offset);
+
+        } while (remaining > 0);
+
+        return playlists;
+    }
+
+    async GetUsersSavedTracksAsync()
+    {
+        let tracks = [];
+        let remaining = 0;
+        let limit = 50;
+        let offset = 0;
+        let countryCode = await this.GetCountryCodeAsync();
+        do
+        {
+            let response = await this.ExecuteWebRequestAsync("/me/tracks?limit=" + limit + "&offset=" + offset + "&market=" + countryCode, "GET");
+            let responseJson = await response.json();
+
+            let currentTracks = responseJson.items.map(responseItem => 
+                new Track(responseItem.track.name, 
+                    responseItem.track.id, 
+                    responseItem.track.album.images[0].url,
+                    responseItem.track.artists.map(artistObject => artistObject.name)));
+
+            tracks = tracks.concat(currentTracks);
+            offset += limit;
+            remaining = responseJson.total - (limit * offset);
+
+        } while (remaining > 0);
+
+        return tracks;
     }
 
     async ResumePlaybackAsync()
@@ -88,12 +144,16 @@ export class SpotifyWebManager
         return headers;
     }
 
-    async PopulateCountryCodeAsync()
+    async GetCountryCodeAsync()
     {
-        let response = await this.ExecuteWebRequestAsync("/me", "GET");
-        let responseJson = await response.json();
-        console.log(responseJson);
-        this.countryCode = responseJson.country;
+        if(!this.countryCode)
+        {
+            let response = await this.ExecuteWebRequestAsync("/me", "GET");
+            let responseJson = await response.json();
+            this.countryCode = responseJson.country;    
+        }
+
+        return this.countryCode;
     }
 
     async AttemptConnectWithoutLoginAsync()
@@ -109,7 +169,6 @@ export class SpotifyWebManager
         }
         
         console.log("Connection succeeded");
-        await this.PopulateCountryCodeAsync();
         return true;
     }
 
@@ -126,7 +185,6 @@ export class SpotifyWebManager
         }
         
         console.log("Login succeeded");
-        await this.PopulateCountryCodeAsync();
         return true;
     }
 
