@@ -28,9 +28,22 @@ export const styles = StyleSheet.create ({
         borderWidth: 1,
         borderColor: 'rgba(158, 150, 150, 0)',
     },
-    filterLibraryText: {
+    filterLibraryButtonText: {
         color: "white",
         fontSize: 10,
         textAlign: "center",
-    }
+    },
+    filterLibraryButtonOff: {
+        margin: 10,
+        padding: 10,
+        backgroundColor: 'rgba(158, 150, 150, 0)',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: "#1DB954",
+    },
+    filterLibraryButtonTextOff: {
+        color: "#1DB954",
+        fontSize: 10,
+        textAlign: "center",
+    },
 });

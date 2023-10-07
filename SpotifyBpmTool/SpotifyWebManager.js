@@ -8,82 +8,61 @@ export class SpotifyWebManager
 {
     async GetUsersSavedAlbumsAsync()
     {
-        let albums = [];
-        let remaining = 0;
-        let limit = 50;
-        let offset = 0;
-        let countryCode = await this.GetCountryCodeAsync();
-        do
-        {
-            let response = await this.ExecuteWebRequestAsync("/me/albums?limit=" + limit + "&offset=" + offset + "&market=" + countryCode, "GET");
-            let responseJson = await response.json();
+        let items = await this.GetItemsFromApiCallAsync("/me/albums");
 
-            let currentAlbums = responseJson.items.map(responseItem => 
-                new Album(responseItem.album.name, 
-                    responseItem.album.id, 
-                    responseItem.album.images[0].url,
-                    responseItem.album.artists.map(artistObject => artistObject.name)));
-
-            albums = albums.concat(currentAlbums);
-            offset += limit;
-            remaining = responseJson.total - (limit * offset);
-
-        } while (remaining > 0);
+        let albums =  items.map(responseItem => 
+            new Album(responseItem.album.name, 
+                responseItem.album.id, 
+                responseItem.album.images[0].url,
+                responseItem.album.artists.map(artistObject => artistObject.name)));
 
         return albums;
     }
 
     async GetUsersSavedPlaylistsAsync()
     {
-        let playlists = [];
-        let remaining = 0;
-        let limit = 50;
-        let offset = 0;
-        do
-        {
-            let response = await this.ExecuteWebRequestAsync("/me/playlists?limit=" + limit + "&offset=" + offset, "GET");
-            let responseJson = await response.json();
+        let items = await this.GetItemsFromApiCallAsync("/me/playlists");
 
-            let currentPlaylists = responseJson.items.map(responseItem => 
-                new Playlist(responseItem.name, 
-                    responseItem.id, 
-                    responseItem.images[0]?.url,
-                    responseItem.owner));
-
-            playlists = playlists.concat(currentPlaylists);
-            offset += limit;
-            remaining = responseJson.total - (limit * offset);
-
-        } while (remaining > 0);
+        let playlists = items.map(responseItem => 
+            new Playlist(responseItem.name, 
+                responseItem.id, 
+                responseItem.images[0]?.url,
+                responseItem.owner.display_name));
 
         return playlists;
     }
 
     async GetUsersSavedTracksAsync()
     {
-        let tracks = [];
+        let items = await this.GetItemsFromApiCallAsync("/me/tracks");
+        
+        let tracks = items.map(responseItem => 
+            new Track(responseItem.track.name, 
+                responseItem.track.id, 
+                responseItem.track.album.images[0].url,
+                responseItem.track.artists.map(artistObject => artistObject.name)));
+        
+        return tracks;
+    }
+
+    async GetItemsFromApiCallAsync(path)
+    {
+        let items = [];
         let remaining = 0;
         let limit = 50;
         let offset = 0;
         let countryCode = await this.GetCountryCodeAsync();
         do
         {
-            let response = await this.ExecuteWebRequestAsync("/me/tracks?limit=" + limit + "&offset=" + offset + "&market=" + countryCode, "GET");
+            let response = await this.ExecuteWebRequestAsync(path + "?limit=" + limit + "&offset=" + offset + "&market=" + countryCode, "GET");
             let responseJson = await response.json();
-
-            let currentTracks = responseJson.items.map(responseItem => 
-                new Track(responseItem.track.name, 
-                    responseItem.track.id, 
-                    responseItem.track.album.images[0].url,
-                    responseItem.track.artists.map(artistObject => artistObject.name)));
-
-            tracks = tracks.concat(currentTracks);
+            items = items.concat(responseJson.items);
             offset += limit;
             remaining = responseJson.total - (limit * offset);
 
         } while (remaining > 0);
 
-        return tracks;
+        return items;
     }
 
     async ResumePlaybackAsync()
