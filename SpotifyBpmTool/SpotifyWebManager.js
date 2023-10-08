@@ -13,8 +13,8 @@ export class SpotifyWebManager
         let albums =  items.map(responseItem => 
             new Album(responseItem.album.name, 
                 responseItem.album.id, 
-                responseItem.album.images[0].url,
-                responseItem.album.artists.map(artistObject => artistObject.name)));
+                responseItem.album?.images[0]?.url,
+                responseItem.album?.artists.map(artistObject => artistObject.name)));
 
         return albums;
     }
@@ -27,7 +27,7 @@ export class SpotifyWebManager
             new Playlist(responseItem.name, 
                 responseItem.id, 
                 responseItem.images[0]?.url,
-                responseItem.owner.display_name));
+                responseItem.owner?.display_name));
 
         return playlists;
     }
@@ -39,9 +39,60 @@ export class SpotifyWebManager
         let tracks = items.map(responseItem => 
             new Track(responseItem.track.name, 
                 responseItem.track.id, 
-                responseItem.track.album.images[0].url,
-                responseItem.track.artists.map(artistObject => artistObject.name)));
+                responseItem.track.album?.images[0]?.url,
+                responseItem.track.artists?.map(artistObject => artistObject.name)));
         
+        return tracks;
+    }
+
+    // URIs should be strings in format {type}:{id}
+    async GetTracksFromUrisAsync(uris)
+    {
+        console.log("Getting tracks via web API with uri list " + uris);
+        let tracks = [];
+        for(let i = 0; i < uris.length; ++i)
+        {
+            let uri = uris[i];
+            let [type, id] = uri.split(":");
+            let newTracks;
+            let items;
+            let countryCode = await this.GetCountryCodeAsync();
+            switch(type)
+            {
+                case "Album":
+                    // We need to get the album info first or else we won't have album art
+                    let response = await this.ExecuteWebRequestAsync("/albums/" + id + "?market=" + countryCode, "GET");
+                    let albumObject = await response.json();
+                    requestPath = "/albums/" + id + "/tracks";
+                    items = await this.GetItemsFromApiCallAsync(requestPath);
+                    newTracks = items.map(responseItem => 
+                        new Track(responseItem.name, 
+                            responseItem.id, 
+                            albumObject.images[0]?.url,
+                            responseItem.artists?.map(artistObject => artistObject.name)));
+                    break;
+                case "Playlist":
+                    // Get the playlist tracks
+                    requestPath = "/playlists/" + id + "/tracks";
+                    items = await this.GetItemsFromApiCallAsync(requestPath);
+                    newTracks = items.map(responseItem => 
+                        new Track(responseItem.track.name, 
+                            responseItem.track.id, 
+                            responseItem.track.album?.images[0]?.url,
+                            responseItem.track.artists?.map(artistObject => artistObject.name)));
+                    break;
+                case "Track":
+                    // Just make the direct API call to get the track info
+                    let trackResponse = await this.ExecuteWebRequestAsync("/tracks/" + id + "?market=" + countryCode, "GET");
+                    let trackObject = await trackResponse.json();
+                    newTracks = [new Track(trackObject.name, trackObject.id, trackObject.album?.images[0]?.url, trackObject.artists?.map(artistObject => artistObject.name))];
+                    break;
+            }
+
+            tracks = tracks.concat(newTracks);
+        }
+
+        console.log("Tracks retrieved");
         return tracks;
     }
 
@@ -58,11 +109,42 @@ export class SpotifyWebManager
             let responseJson = await response.json();
             items = items.concat(responseJson.items);
             offset += limit;
-            remaining = responseJson.total - (limit * offset);
-
+            remaining = responseJson.total - offset;
         } while (remaining > 0);
 
         return items;
+    }
+
+    async GetTrackTemposAsync(trackIds)
+    {
+        console.log("Getting track tempos via web API with track id list " + trackIds);
+        let idToTempoMap = {};
+        let remaining = 0;
+        let limit = 100;
+        let offset = 0;
+        do
+        {
+            let trackQueryString = trackIds.slice(offset, offset + limit).join(",");
+            let response = await this.ExecuteWebRequestAsync("/audio-features?ids=" + trackQueryString, "GET");
+            let responseJson = await response.json();
+
+            const audioFeatures = responseJson.audio_features;
+            for(let i = 0; i < audioFeatures.length; ++i)
+            {
+                let audioFeature = audioFeatures[i];
+                if(audioFeature)
+                {
+                    idToTempoMap[audioFeature.id] = Math.floor(audioFeature.tempo);
+                }
+            }
+
+            offset += limit;
+            remaining = trackIds.length - offset;
+            console.log(remaining);
+        } while (remaining > 0);
+
+        console.log("Track tempos retrieved");
+        return idToTempoMap;
     }
 
     async ResumePlaybackAsync()

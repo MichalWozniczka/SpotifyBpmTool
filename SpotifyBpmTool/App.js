@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ActivityIndicator, Image, Pressable, SectionList, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, SectionList, Text, TextInput, View } from "react-native";
 import { SpotifyWebManager } from "./SpotifyWebManager";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -68,9 +68,9 @@ function LoginScreen({ navigation, route })
     }, [loginComplete]);
 
     return (
-        <View style={styles.loginScreen}>
-            <Pressable style={styles.connectButton} onPress={() => loginSpotifyWebManager()}>
-                <Text style={styles.connectTextColor}>Connect to Spotify</Text>
+        <View style={{flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#212020",}}>
+            <Pressable style={{margin: 20, padding: 20, backgroundColor: "#1DB954", borderRadius: 40, borderWidth: 1, borderColor: 'rgba(158, 150, 150, 0)',}} onPress={() => loginSpotifyWebManager()}>
+                <Text style={{color: "white", fontSize: 30, textAlign: "center",}}>Connect to Spotify</Text>
             </Pressable>
         </View>
     );
@@ -78,6 +78,86 @@ function LoginScreen({ navigation, route })
 
 function PlaylistScreen({ navigation, route })
 {
+    const [tempoLowerLimit, setTempoLowerLimit] = useState(0);
+    const [tempoUpperLimit, setTempoUpperLimit] = useState(0);
+    const [tracks, setTracks] = useState([]);
+    const [tracksFetched, setTracksFetched] = useState(false);
+
+    // Default is a loading spinner. Will update to scrollview once items are loaded from API
+    const [librarySelectItemListOrLoad, setLibrarySelectItemListOrLoad] = useState(<View style={{flex: 1, justifyContent: "center"}}><ActivityIndicator color="#1DB954" size="large" /></View>);
+
+    function onTempoLowerLimitChanged(input)
+    {
+        let numericInput = input.replace(/[^0-9]/g, '');
+
+        if(numericInput.length == 0)
+        {
+            numericInput = "0";
+        }
+
+        setTempoLowerLimit(Math.min(Math.floor(Number(numericInput)), 1000000));
+    }
+
+    function onTempoUpperLimitChanged(input)
+    {
+        let numericInput = input.replace(/[^0-9]/g, '');
+
+        if(numericInput.length == 0)
+        {
+            numericInput = "0";
+        }
+
+        setTempoUpperLimit(Math.min(Math.floor(Number(numericInput)), 1000000));
+    }
+
+    function areTempoLimitsValid()
+    {
+        return tempoLowerLimit <= tempoUpperLimit;
+    }
+
+    async function GetTracksWithInfo()
+    {
+        console.log("Getting tracks and populating bpm from item list " + route.params.selectedItems);
+        let trackItems = await spotifyWebManager.GetTracksFromUrisAsync(route.params.selectedItems);
+
+        let trackIdArray = trackItems.map(track => track.id);
+        let idToTempoMap = await spotifyWebManager.GetTrackTemposAsync(trackIdArray);
+
+        console.log("Updating existing track items with fetched tempos");
+        for(let i = 0; i < trackItems.length; ++i)
+        {
+            trackItems[i].tempo = idToTempoMap[trackItems[i].id];
+        }
+
+        setTracks(trackItems);
+        setTracksFetched(true);
+        console.log("Got tracks with bpms.");
+    }
+
+    // Run immediately to fetch tracks via web API
+    useEffect(() => {
+        if(!tracksFetched)
+        {
+            GetTracksWithInfo();
+        }
+    }, []);
+
+    const textStyle = {margin: 5, color: "white", fontSize: 20 };
+    const textInputStyle = {margin: 5, color: "white", height: 25, width: 35, textAlign: "center", borderWidth: 1, backgroundColor: "#2e2e2e", borderRadius: 3, borderColor: (areTempoLimitsValid() ? "white" : "red")};
+
+    return (
+        <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
+            <View style={{height: 20}}/>
+            <View style={{margin: 20, padding: 10, flex: 1}}>
+                <Text style={{color: "white", fontSize: 30}}>Filter By Tempo</Text>
+                <View style={{flexDirection: "row", alignItems: "center"}}>
+                    <Text style={textStyle}>Lower:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoLowerLimitChanged}/>
+                    <Text style={textStyle}>Upper:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoUpperLimitChanged}/>
+                </View>
+                {librarySelectItemListOrLoad}
+            </View>
+        </View>
+    );
 }
 
 function LibrarySelectScreen({ navigation, route })
@@ -122,24 +202,27 @@ function LibrarySelectScreen({ navigation, route })
         setTracksFetched(true);
     }
 
-    function ToggleFilter(name)
+    function ToggleSectionFunction(name)
     {
         const newFilteredSections = new Set(filteredSections);
         if(newFilteredSections.has(name))
         {
+            console.log("Toggling section  " + name + " on");
             newFilteredSections.delete(name);
         }
         else
         {
+            console.log("Toggling section " + name + " off");
             newFilteredSections.add(name);
         }
         setFilteredSections(newFilteredSections);
 
         // Clear selected items of items from the section being toggled off
-        for(item of selectedItems.current)
+        for(let item of selectedItems.current)
         {
             if(name.includes(item.split(":")[0]))
             {
+                console.log("De-selecting item " + item + " due to section " + name + " being toggled off");
                 selectedItems.current.delete(item);
             }
         }
@@ -147,16 +230,18 @@ function LibrarySelectScreen({ navigation, route })
         setSelectedCount(selectedItems.current.size);
     }
 
-    function ToggleLibraryItem(toggleState, type, id)
+    function ToggleLibraryItemFunction(toggleState, type, id)
     {
         let uri = type + ":" + id;
 
         if(!toggleState)
         {
+            console.log("De-selecting item " + uri + " due to user interaction");
             selectedItems.current.delete(uri);
         }
         else
         {
+            console.log("Selecting item " + uri + " due to user interaction");
             selectedItems.current.add(uri);
         }
 
@@ -194,7 +279,7 @@ function LibrarySelectScreen({ navigation, route })
             setLibrarySelectItemListOrLoad(<SectionList 
                 sections={sections}
                 extraData={filteredSections}
-                renderItem={({ section: { title }, item }) => <LibrarySelectItem libraryItem={item} toggleSelectionFunction={ToggleLibraryItem}/>}
+                renderItem={({item}) => <LibrarySelectItem libraryItem={item} ToggleLibraryItemFunction={ToggleLibraryItemFunction}/>}
                 renderSectionHeader={({section}) => (
                 <Text style={{color: "white", fontSize: 20}}>{section.title}</Text>
                 )}
@@ -213,7 +298,12 @@ function LibrarySelectScreen({ navigation, route })
             return;
         }
 
-        setNextButton(<Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => _}>
+        setNextButton(<Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => {
+                    let selectedItemsArray = Array.from(selectedItems.current);
+                    console.log("Navigating to Playlist screen. Sending over selected items: " + selectedItemsArray) ;
+                    navigation.navigate("Playlist", { selectedItems: selectedItemsArray });
+                }
+            }>
             <Text style={{height: 30, color: "white", fontSize: 30}}>{selectedCount} item{(selectedCount > 1 ? "s" : "")}</Text>
             <View style={{flexDirection: "column", marginLeft: 5}}>
                 <View style={{flex: 1}}/>
@@ -228,9 +318,9 @@ function LibrarySelectScreen({ navigation, route })
             <View style={{margin: 20, padding: 10, flex: 1}}>
                 <Text style={{color: "white", fontSize: 30}}>Select Library</Text>
                 <View style={{flexDirection: "row"}}>
-                    <FilterLibraryButton name={albumsName} toggleFunction={ToggleFilter} isToggled={!filteredSections.has(albumsName)}/>
-                    <FilterLibraryButton name={playlistsName} toggleFunction={ToggleFilter} isToggled={!filteredSections.has(playlistsName)}/>
-                    <FilterLibraryButton name={tracksName} toggleFunction={ToggleFilter} isToggled={!filteredSections.has(tracksName)}/>
+                    <FilterLibraryButton name={albumsName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(albumsName)}/>
+                    <FilterLibraryButton name={playlistsName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(playlistsName)}/>
+                    <FilterLibraryButton name={tracksName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(tracksName)}/>
                 </View>
                 {librarySelectItemListOrLoad}
                 <View style={{flexDirection: "row"}}>
@@ -242,16 +332,16 @@ function LibrarySelectScreen({ navigation, route })
     );
 }
 
-function FilterLibraryButton({ name, toggleFunction, isToggled })
+function FilterLibraryButton({ name, ToggleSectionFunction, isToggled })
 {
     return (
-        <Pressable style={(isToggled ? styles.filterLibraryButton : styles.filterLibraryButtonOff)} onPress={() => toggleFunction(name)}>
-            <Text style={(isToggled ? styles.filterLibraryButtonText : styles.filterLibraryButtonTextOff)}>{name}</Text>
+        <Pressable style={{margin: 10, padding: 10, backgroundColor: (isToggled ? "#1DB954" : "rgba(158, 150, 150, 0)"), borderRadius: 20, borderWidth: 1, borderColor: "#1DB954",}} onPress={() => ToggleSectionFunction(name)}>
+            <Text style={{color: (isToggled ? "white" : "#1DB954"), fontSize: 10, textAlign: "center",}}>{name}</Text>
         </Pressable>
     );
 }
 
-function LibrarySelectItem({ libraryItem, toggleSelectionFunction })
+function LibrarySelectItem({ libraryItem, ToggleLibraryItemFunction })
 {
     const [isSelected, setIsSelected] = useState(false);
 
@@ -260,7 +350,7 @@ function LibrarySelectItem({ libraryItem, toggleSelectionFunction })
     const radioUnselected = require("./assets/radioUnselected.png");
 
     return (
-        <Pressable onPress={() => { toggleSelectionFunction(!isSelected, libraryItem.type, libraryItem.id); setIsSelected(!isSelected); }}>
+        <Pressable onPress={() => { ToggleLibraryItemFunction(!isSelected, libraryItem.type, libraryItem.id); setIsSelected(!isSelected); }}>
             <View style={{borderRadius: 10, padding: 10, margin: 3, backgroundColor: (isSelected ? "#1DB954" : "rgba(158, 150, 150, 0)"), flexDirection: "row", alignItems: "center"}}>
                 <Image style={{width: 70, height: 70, borderRadius: 5}} source={{uri: libraryItem.imageUrl}}/>
                 <View style={{padding: 10, flexDirection: "column", flex: 1}}>
