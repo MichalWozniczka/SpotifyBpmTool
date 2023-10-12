@@ -89,7 +89,7 @@ function PlaylistScreen({ navigation, route })
     let excludedTracks = useRef(new Set());
     const [excludedTracksCount, setExcludedTracksCount] = useState(0);
     const [playlistToSaveLength, setPlaylistToSaveLength] = useState(0);
-    const [savePlaylistButton, setSavePlaylistButton] = useState(undefined);
+    const [allowDoubleTempo, setAllowDoubleTempo] = useState(false);
 
     // Default is a loading spinner. Will update to scrollview once items are loaded from API
     const [libraryItemListOrLoad, setLibraryItemListOrLoad] = useState(<View style={{flex: 1, justifyContent: "center"}}><ActivityIndicator color="#1DB954" size="large" /></View>);
@@ -158,7 +158,9 @@ function PlaylistScreen({ navigation, route })
         let filteredTracks = tracks;
         if(areTempoLimitsValid() && !(tempoLowerLimit == 0 && tempoUpperLimit == 0))
         {
-            filteredTracks = filteredTracks.filter(track => track.tempo >= tempoLowerLimit && track.tempo <= tempoUpperLimit);
+            filteredTracks = filteredTracks.filter(track => (track.tempo >= tempoLowerLimit && track.tempo <= tempoUpperLimit)
+                || (allowDoubleTempo && (track.tempo * 2 >= tempoLowerLimit && track.tempo * 2 <= tempoUpperLimit))
+                || (allowDoubleTempo && (track.tempo / 2 >= tempoLowerLimit && track.tempo / 2 <= tempoUpperLimit)));
         }
 
         return filteredTracks;
@@ -227,7 +229,7 @@ function PlaylistScreen({ navigation, route })
 
             if(tracks.length == 0)
             {
-                setLibraryItemListOrLoad(<Text style={{padding: 5, color: "#bdbdbd", fontSize: 15, flex: 1}}>There's nothing here...</Text>)
+                setLibraryItemListOrLoad(<Text style={{padding: 5, color: "#bdbdbd", fontSize: 15, flex: 1}}>There's nothing here...</Text>);
             }
             else
             {
@@ -238,7 +240,7 @@ function PlaylistScreen({ navigation, route })
                 />);
             }
         }
-    }, [tracksFetched, tempoLowerLimit, tempoUpperLimit]);
+    }, [tracksFetched, tempoLowerLimit, tempoUpperLimit, allowDoubleTempo]);
 
     useEffect(() => {
         setPlaylistToSaveLength(getUnexcludedTracksSortedAndFilteredByTempo().length);
@@ -248,15 +250,22 @@ function PlaylistScreen({ navigation, route })
     const textInputStyle = {margin: 5, color: "white", height: 25, width: 35, textAlign: "center", borderWidth: 1, backgroundColor: "#2e2e2e", borderRadius: 3, borderColor: (areTempoLimitsValid() ? "white" : "red")};
     const rightArrow = require("./assets/right-arrow.png");
     const leftArrow = require("./assets/left-arrow.png");
+    const checkboxOn = require("./assets/checkboxOn.png");
+    const checkboxOff = require("./assets/checkboxOff.png");
 
     return (
         <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
             <View style={{height: 20}}/>
             <View style={{marginTop: 20, marginLeft: 10, marginRight: 10, padding: 10, flex: 1}}>
-                <Text style={{color: "white", fontSize: 30}}>Filter By Tempo</Text>
-                <View style={{flexDirection: "row", alignItems: "center", paddingBottom: 8}}>
-                    <Text style={textStyle}>Lower:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoLowerLimitChanged}/>
-                    <Text style={textStyle}>Upper:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoUpperLimitChanged}/>
+                <View style={{paddingBottom: 8}}>
+                    <Text style={{color: "white", fontSize: 30}}>Filter By Tempo</Text>
+                    <View style={{flexDirection: "row", alignItems: "center"}}>
+                        <Text style={textStyle}>Lower:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoLowerLimitChanged}/>
+                        <Text style={textStyle}>Upper:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoUpperLimitChanged}/>
+                    </View>
+                    <Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => setAllowDoubleTempo(!allowDoubleTempo)}>
+                        <Text style={textStyle}>Allow half-/double-tempo:</Text><Image style={{width: 20, height: 20}} source={(allowDoubleTempo ? checkboxOn : checkboxOff)}/>
+                    </Pressable>
                 </View>
                 {libraryItemListOrLoad}
                 <View style={{height: 50, padding: 8, flexDirection: "row"}}>
@@ -270,7 +279,6 @@ function PlaylistScreen({ navigation, route })
                         </View>
                     </Pressable>
                     <View style={{flex: 1}}/>
-                    {savePlaylistButton}
                     <Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => onSavePlaylistDialogShow()}>
                         {playlistToSaveLength == 0 ? undefined : <Text style={{color: "white", fontSize: 15, textAlign: "right"}}>Save as{"\n"}Spotify playlist</Text>}
                         <View style={{flexDirection: "column", marginLeft: 5}}>
@@ -316,19 +324,25 @@ function LibrarySelectScreen({ navigation, route })
 
     async function GetAlbums()
     {
-        setAlbums(await spotifyWebManager.GetUsersSavedAlbumsAsync());
+        let albumItems = await spotifyWebManager.GetUsersSavedAlbumsAsync();
+        albumItems = albumItems.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 );
+        setAlbums(albumItems);
         setAlbumsFetched(true);
     }
     
     async function GetPlaylists()
     {
-        setPlaylists(await spotifyWebManager.GetUsersSavedPlaylistsAsync());
+        let playlistItems = await spotifyWebManager.GetUsersSavedPlaylistsAsync();
+        playlistItems = playlistItems.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 )
+        setPlaylists(playlistItems);
         setPlaylistsFetched(true);
     }
     
     async function GetTracks()
     {
-        setTracks(await spotifyWebManager.GetUsersSavedTracksAsync());
+        let trackItems = await spotifyWebManager.GetUsersSavedTracksAsync();
+        trackItems.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 );
+        setTracks(trackItems);
         setTracksFetched(true);
     }
 
@@ -399,20 +413,32 @@ function LibrarySelectScreen({ navigation, route })
         // Display a loading spinner until all items are fetched. 
         if (albumsFetched && playlistsFetched && tracksFetched)
         {
-            // Filter out the sections from view
-            const sections = [
-                { title: "Albums", data: albums},
-                { title: "Playlists", data: playlists},
-                { title: "Tracks", data: tracks},
-            ].filter(section => !filteredSections.has(section.title));
+            let items = [];
+            if(!filteredSections.has(albumsName))
+            {
+                items = items.concat(albums);
+            }
+            if(!filteredSections.has(playlistsName))
+            {
+                items = items.concat(playlists);
+            }
+            if(!filteredSections.has(tracksName))
+            {
+                items = items.concat(tracks);
+            }
 
-            setLibrarySelectItemListOrLoad(<SectionList 
-                sections={sections}
-                extraData={filteredSections}
-                renderItem={({item}) => <LibrarySelectItem libraryItem={item} ToggleLibraryItemFunction={ToggleLibraryItemFunction}/>}
-                renderSectionHeader={({section}) => (<Text style={{color: "white", fontSize: 20}}>{section.title}</Text>)}
-                keyExtractor={item => `librarySelectItem-${item.id}`}
-            />);
+            if(items.length == 0)
+            {
+                setLibrarySelectItemListOrLoad(<Text style={{padding: 5, color: "#bdbdbd", fontSize: 15, flex: 1}}>There's nothing here...</Text>);
+            }
+            else
+            {
+                setLibrarySelectItemListOrLoad(<FlatList
+                    data={items}
+                    renderItem={({item}) => <LibrarySelectItem libraryItem={item} ToggleLibraryItemFunction={ToggleLibraryItemFunction} />}
+                    keyExtractor={item => `librarySelectItem-${item.id}`}
+                />);
+            }
         }
     }, [albumsFetched, playlistsFetched, tracksFetched, filteredSections]);
     

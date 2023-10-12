@@ -80,6 +80,7 @@ export class SpotifyWebManager
     {
         console.log("Getting tracks via web API with uri list " + uris);
         let tracks = [];
+        let trackFetchPromises = [];
         for(let i = 0; i < uris.length; ++i)
         {
             let uri = uris[i];
@@ -91,35 +92,39 @@ export class SpotifyWebManager
             {
                 case "Album":
                     // We need to get the album info first or else we won't have album art
-                    let response = await this.ExecuteWebRequestAsync("/albums/" + id + "?market=" + countryCode, "GET");
-                    let albumObject = await response.json();
-                    requestPath = "/albums/" + id + "/tracks";
-                    items = await this.GetItemsFromApiCallAsync(requestPath);
-                    newTracks = items.map(responseItem => 
-                        new Track(responseItem.name, 
-                            responseItem.id, 
-                            albumObject.images[0]?.url,
-                            responseItem.artists?.map(artistObject => artistObject.name)));
+                    trackFetchPromises.push(this.ExecuteWebRequestAsync("/albums/" + id + "?market=" + countryCode, "GET")
+                        .then(response =>  response.json())
+                        .then(albumObject => this.GetItemsFromApiCallAsync("/albums/" + id + "/tracks")
+                            .then(items => items.map(responseItem => 
+                                new Track(responseItem.name, 
+                                    responseItem.id, 
+                                    albumObject.images[0]?.url,
+                                    responseItem.artists?.map(artistObject => artistObject.name))
+                                )
+                            )
+                        )
+                    );
                     break;
                 case "Playlist":
                     // Get the playlist tracks
                     requestPath = "/playlists/" + id + "/tracks";
-                    items = await this.GetItemsFromApiCallAsync(requestPath);
-                    newTracks = items.map(responseItem => 
-                        new Track(responseItem.track.name, 
-                            responseItem.track.id, 
-                            responseItem.track.album?.images[0]?.url,
-                            responseItem.track.artists?.map(artistObject => artistObject.name)));
+                    trackFetchPromises.push(this.GetItemsFromApiCallAsync(requestPath)
+                        .then(items => items.map(responseItem => 
+                            new Track(responseItem.track.name, 
+                                responseItem.track.id, 
+                                responseItem.track.album?.images[0]?.url,
+                                responseItem.track.artists?.map(artistObject => artistObject.name)))));
                     break;
                 case "Track":
                     // Just make the direct API call to get the track info
-                    let trackResponse = await this.ExecuteWebRequestAsync("/tracks/" + id + "?market=" + countryCode, "GET");
-                    let trackObject = await trackResponse.json();
-                    newTracks = [new Track(trackObject.name, trackObject.id, trackObject.album?.images[0]?.url, trackObject.artists?.map(artistObject => artistObject.name))];
+                    trackFetchPromises.push(this.ExecuteWebRequestAsync("/tracks/" + id + "?market=" + countryCode, "GET")
+                        .then(response => response.json())
+                        .then(trackObject => [new Track(trackObject.name, trackObject.id, trackObject.album?.images[0]?.url, trackObject.artists?.map(artistObject => artistObject.name))])
+                    );
                     break;
             }
 
-            tracks = tracks.concat(newTracks);
+            tracks = (await Promise.all(trackFetchPromises)).flat();
         }
 
         // Get rid of duplicates
