@@ -7,6 +7,11 @@ export class LibraryItem
         this.id = id;
         this.imageUrl = imageUrl;
     }
+
+    get uri()
+    {
+        return "spotify:" + this.type.toLowerCase() + ":" + this.id;
+    }
 }
 
 export class Album extends LibraryItem
@@ -33,5 +38,6 @@ export class Track extends LibraryItem
     {
         super("Track", name, id, imageUrl);
         this.artists = artists;
+        this.tempo = 0;
     }
 }

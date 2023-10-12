@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ActivityIndicator, Image, Pressable, SectionList, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, Pressable, SectionList, Text, TextInput, View } from "react-native";
 import { SpotifyWebManager } from "./SpotifyWebManager";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { styles } from "./StyleSheet";
 import { LibraryItem } from "./LibraryItem";
+import Dialog from "react-native-dialog";
+
 
 const Stack = createNativeStackNavigator();
 const spotifyWebManager = new SpotifyWebManager();
@@ -82,9 +84,15 @@ function PlaylistScreen({ navigation, route })
     const [tempoUpperLimit, setTempoUpperLimit] = useState(0);
     const [tracks, setTracks] = useState([]);
     const [tracksFetched, setTracksFetched] = useState(false);
+    const [savePlaylistDialogVisible, setSavePlaylistDialogVisible] = useState(false);
+    const [savePlaylistName, setSavePlaylistName] = useState("New playlist filtered by tempo");
+    let excludedTracks = useRef(new Set());
+    const [excludedTracksCount, setExcludedTracksCount] = useState(0);
+    const [playlistToSaveLength, setPlaylistToSaveLength] = useState(0);
+    const [savePlaylistButton, setSavePlaylistButton] = useState(undefined);
 
     // Default is a loading spinner. Will update to scrollview once items are loaded from API
-    const [librarySelectItemListOrLoad, setLibrarySelectItemListOrLoad] = useState(<View style={{flex: 1, justifyContent: "center"}}><ActivityIndicator color="#1DB954" size="large" /></View>);
+    const [libraryItemListOrLoad, setLibraryItemListOrLoad] = useState(<View style={{flex: 1, justifyContent: "center"}}><ActivityIndicator color="#1DB954" size="large" /></View>);
 
     function onTempoLowerLimitChanged(input)
     {
@@ -110,9 +118,55 @@ function PlaylistScreen({ navigation, route })
         setTempoUpperLimit(Math.min(Math.floor(Number(numericInput)), 1000000));
     }
 
+    function onSavePlaylistDialogCancel()
+    {
+        setSavePlaylistName("New playlist filtered by tempo");
+        setSavePlaylistDialogVisible(false);
+    }
+
+    async function onSavePlaylistDialogSave()
+    {
+        console.log("Saving playlist with name " + savePlaylistName + " to Spotify");
+        setSavePlaylistDialogVisible(false);
+        let trackIds = getUnexcludedTracksSortedAndFilteredByTempo().map(track => track.id);
+        await spotifyWebManager.CreateAndPopulatePlaylistFromTracksAsync(savePlaylistName, trackIds);
+    }
+
+    function onSavePlaylistDialogNameUpdated(name)
+    {
+        setSavePlaylistName(name);
+    }
+
+    function onSavePlaylistDialogShow()
+    {
+        if(playlistToSaveLength == 0)
+        {
+            console.log("Attempted to show name playlist dialog, but there are no selected tracks to save");
+            return;
+        }
+        console.log("Showing name playlist dialog");
+        setSavePlaylistDialogVisible(true);
+    }
+
     function areTempoLimitsValid()
     {
         return tempoLowerLimit <= tempoUpperLimit;
+    }
+
+    function getTracksSortedAndFilteredByTempo()
+    {
+        let filteredTracks = tracks;
+        if(areTempoLimitsValid() && !(tempoLowerLimit == 0 && tempoUpperLimit == 0))
+        {
+            filteredTracks = filteredTracks.filter(track => track.tempo >= tempoLowerLimit && track.tempo <= tempoUpperLimit);
+        }
+
+        return filteredTracks;
+    }
+
+    function getUnexcludedTracksSortedAndFilteredByTempo()
+    {
+        return getTracksSortedAndFilteredByTempo().filter(track => !excludedTracks.current.has(track.id));
     }
 
     async function GetTracksWithInfo()
@@ -129,9 +183,31 @@ function PlaylistScreen({ navigation, route })
             trackItems[i].tempo = idToTempoMap[trackItems[i].id];
         }
 
+        // Filter out tracks that don't have a tempo associated with them (these are probably locally added songs, but we don't want them)
+        trackItems = trackItems.filter(trackItem => !!trackItem.tempo);
+
+        // Sort by tempo now so we don't have to worry about it in the future
+        trackItems = trackItems.sort((a, b) => a.tempo - b.tempo);
+
         setTracks(trackItems);
         setTracksFetched(true);
         console.log("Got tracks with bpms.");
+    }
+
+    function ToggleExcludedTrackFunction(toggleState, id)
+    {
+        if(!toggleState)
+        {
+            console.log("Un-excluding item " + id + " due to user interaction");
+            excludedTracks.current.delete(id);
+        }
+        else
+        {
+            console.log("Excluding item " + id + " due to user interaction");
+            excludedTracks.current.add(id);
+        }
+
+        setExcludedTracksCount(excludedTracks.current.size);
     }
 
     // Run immediately to fetch tracks via web API
@@ -142,20 +218,74 @@ function PlaylistScreen({ navigation, route })
         }
     }, []);
 
+    // Update scrollview based on whether we fetched the items and the tempo
+    useEffect(() => {
+        // Display a loading spinner until all items are fetched. 
+        if (tracksFetched)
+        {
+            let tracks = getTracksSortedAndFilteredByTempo()
+
+            if(tracks.length == 0)
+            {
+                setLibraryItemListOrLoad(<Text style={{padding: 5, color: "#bdbdbd", fontSize: 15, flex: 1}}>There's nothing here...</Text>)
+            }
+            else
+            {
+                setLibraryItemListOrLoad(<FlatList
+                    data={tracks}
+                    renderItem={({item}) => <LibraryPlaylistItem libraryItem={item} ToggleExcludedTrackFunction={ToggleExcludedTrackFunction} excluded={excludedTracks.current.has(item.id)} />}
+                    keyExtractor={item => `libraryPlaylistItem-${item.id}`}
+                />);
+            }
+        }
+    }, [tracksFetched, tempoLowerLimit, tempoUpperLimit]);
+
+    useEffect(() => {
+        setPlaylistToSaveLength(getUnexcludedTracksSortedAndFilteredByTempo().length);
+    }, [tracksFetched, tempoLowerLimit, tempoUpperLimit, excludedTracksCount]);
+    
     const textStyle = {margin: 5, color: "white", fontSize: 20 };
     const textInputStyle = {margin: 5, color: "white", height: 25, width: 35, textAlign: "center", borderWidth: 1, backgroundColor: "#2e2e2e", borderRadius: 3, borderColor: (areTempoLimitsValid() ? "white" : "red")};
+    const rightArrow = require("./assets/right-arrow.png");
+    const leftArrow = require("./assets/left-arrow.png");
 
     return (
         <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
             <View style={{height: 20}}/>
-            <View style={{margin: 20, padding: 10, flex: 1}}>
+            <View style={{marginTop: 20, marginLeft: 10, marginRight: 10, padding: 10, flex: 1}}>
                 <Text style={{color: "white", fontSize: 30}}>Filter By Tempo</Text>
-                <View style={{flexDirection: "row", alignItems: "center"}}>
+                <View style={{flexDirection: "row", alignItems: "center", paddingBottom: 8}}>
                     <Text style={textStyle}>Lower:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoLowerLimitChanged}/>
                     <Text style={textStyle}>Upper:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoUpperLimitChanged}/>
                 </View>
-                {librarySelectItemListOrLoad}
+                {libraryItemListOrLoad}
+                <View style={{height: 50, padding: 8, flexDirection: "row"}}>
+                    <Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => {
+                            console.log("Navigating back to Library Select screen.");
+                            navigation.goBack();
+                        }}>
+                        <View style={{flexDirection: "column"}}>
+                            <View style={{flex: 1}}/>
+                            <Image style={{width: 25, height: 25}} source={leftArrow}/>
+                        </View>
+                    </Pressable>
+                    <View style={{flex: 1}}/>
+                    {savePlaylistButton}
+                    <Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => onSavePlaylistDialogShow()}>
+                        {playlistToSaveLength == 0 ? undefined : <Text style={{color: "white", fontSize: 15, textAlign: "right"}}>Save as{"\n"}Spotify playlist</Text>}
+                        <View style={{flexDirection: "column", marginLeft: 5}}>
+                            <View style={{flex: 1}}/>
+                            {playlistToSaveLength == 0 ? undefined : <Image style={{width: 25, height: 25}} source={rightArrow}/>}
+                        </View>
+                    </Pressable>
+                </View>
             </View>
+            <Dialog.Container visible={savePlaylistDialogVisible} onBackdropPress={onSavePlaylistDialogCancel} onRequestClose={onSavePlaylistDialogCancel}>
+                <Dialog.Title>Name Your Playlist</Dialog.Title>
+                <Dialog.Input onChangeText={onSavePlaylistDialogNameUpdated}/>
+                <Dialog.Button color="#1DB954" label="Cancel" onPress={onSavePlaylistDialogCancel}/>
+                <Dialog.Button color="#1DB954" label="Save to Spotify" onPress={onSavePlaylistDialogSave}/>
+            </Dialog.Container>
         </View>
     );
 }
@@ -280,10 +410,8 @@ function LibrarySelectScreen({ navigation, route })
                 sections={sections}
                 extraData={filteredSections}
                 renderItem={({item}) => <LibrarySelectItem libraryItem={item} ToggleLibraryItemFunction={ToggleLibraryItemFunction}/>}
-                renderSectionHeader={({section}) => (
-                <Text style={{color: "white", fontSize: 20}}>{section.title}</Text>
-                )}
-                keyExtractor={item => `libraryItem-${item.id}`}
+                renderSectionHeader={({section}) => (<Text style={{color: "white", fontSize: 20}}>{section.title}</Text>)}
+                keyExtractor={item => `librarySelectItem-${item.id}`}
             />);
         }
     }, [albumsFetched, playlistsFetched, tracksFetched, filteredSections]);
@@ -304,7 +432,7 @@ function LibrarySelectScreen({ navigation, route })
                     navigation.navigate("Playlist", { selectedItems: selectedItemsArray });
                 }
             }>
-            <Text style={{height: 30, color: "white", fontSize: 30}}>{selectedCount} item{(selectedCount > 1 ? "s" : "")}</Text>
+            <Text style={{alignSelf: "center", color: "white", fontSize: 30}}>{selectedCount} item{(selectedCount > 1 ? "s" : "")}</Text>
             <View style={{flexDirection: "column", marginLeft: 5}}>
                 <View style={{flex: 1}}/>
                 <Image style={{width: 25, height: 25}} source={rightArrow}/>
@@ -315,15 +443,15 @@ function LibrarySelectScreen({ navigation, route })
     return (
         <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
             <View style={{height: 20}}/>
-            <View style={{margin: 20, padding: 10, flex: 1}}>
+            <View style={{marginTop: 20, marginLeft: 10, marginRight: 10, padding: 10, flex: 1}}>
                 <Text style={{color: "white", fontSize: 30}}>Select Library</Text>
-                <View style={{flexDirection: "row"}}>
+                <View style={{flexDirection: "row", paddingBottom: 5}}>
                     <FilterLibraryButton name={albumsName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(albumsName)}/>
                     <FilterLibraryButton name={playlistsName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(playlistsName)}/>
                     <FilterLibraryButton name={tracksName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(tracksName)}/>
                 </View>
                 {librarySelectItemListOrLoad}
-                <View style={{flexDirection: "row"}}>
+                <View style={{height: 45, padding: 8, flexDirection: "row"}}>
                     <View style={{flex: 1}}/>
                     {nextButton}
                 </View>
@@ -335,9 +463,32 @@ function LibrarySelectScreen({ navigation, route })
 function FilterLibraryButton({ name, ToggleSectionFunction, isToggled })
 {
     return (
-        <Pressable style={{margin: 10, padding: 10, backgroundColor: (isToggled ? "#1DB954" : "rgba(158, 150, 150, 0)"), borderRadius: 20, borderWidth: 1, borderColor: "#1DB954",}} onPress={() => ToggleSectionFunction(name)}>
-            <Text style={{color: (isToggled ? "white" : "#1DB954"), fontSize: 10, textAlign: "center",}}>{name}</Text>
+        <Pressable style={{margin: 10, padding: 8, backgroundColor: (isToggled ? "#1DB954" : "rgba(158, 150, 150, 0)"), borderRadius: 20, borderWidth: 1, borderColor: "#1DB954",}} onPress={() => ToggleSectionFunction(name)}>
+            <Text style={{color: (isToggled ? "white" : "#1DB954"), fontSize: 15, textAlign: "center",}}>{name}</Text>
         </Pressable>
+    );
+}
+
+function LibraryPlaylistItem({ libraryItem, ToggleExcludedTrackFunction, excluded })
+{
+    const [isExcluded, setIsExcluded] = useState(excluded);
+    const hiddenIcon = require("./assets/hidden.png");
+    const visibleIcon = require("./assets/visible.png");
+    const itemDetails = <View style={{flex: 1, flexDirection: "row",  alignItems: "center",}}>
+        <LibraryItemInfo libraryItem={libraryItem}/>
+        <View style={{padding: 10, flexDirection: "column", justifyContent: "center", alignItems: "center"}}>
+            <Text style={{fontSize: 20, color: "white", justifyContent: "center"}} numberOfLines={1} ellipsizeMode="tail">{libraryItem.tempo}</Text>
+            <Text style={{fontSize: 10, color: "white", justifyContent: "center"}} numberOfLines={1} ellipsizeMode="tail">BPM</Text>
+        </View>
+    </View>;
+
+    return (
+        <View style={styles.libraryItem}>
+            {isExcluded ? <Text style={{padding: 5, color: "#bdbdbd", fontSize: 10, flex: 1, fontStyle: "italic"}}>Excluded</Text> : itemDetails}
+            <Pressable style={{marginLeft: "auto"}} onPress={() => {ToggleExcludedTrackFunction(!isExcluded, libraryItem.id); setIsExcluded(!isExcluded)}}>
+                <Image style={{width: 25, height: 25}} source={(isExcluded ? hiddenIcon : visibleIcon)}/>
+            </Pressable>
+        </View>
     );
 }
 
@@ -345,20 +496,30 @@ function LibrarySelectItem({ libraryItem, ToggleLibraryItemFunction })
 {
     const [isSelected, setIsSelected] = useState(false);
 
-    const detailString = libraryItem.type + " • " +  (libraryItem.type == "Playlist" ? libraryItem.owner : libraryItem.artists.join(", "));
     const radioSelected = require("./assets/radioSelected.png");
     const radioUnselected = require("./assets/radioUnselected.png");
 
     return (
         <Pressable onPress={() => { ToggleLibraryItemFunction(!isSelected, libraryItem.type, libraryItem.id); setIsSelected(!isSelected); }}>
-            <View style={{borderRadius: 10, padding: 10, margin: 3, backgroundColor: (isSelected ? "#1DB954" : "rgba(158, 150, 150, 0)"), flexDirection: "row", alignItems: "center"}}>
-                <Image style={{width: 70, height: 70, borderRadius: 5}} source={{uri: libraryItem.imageUrl}}/>
-                <View style={{padding: 10, flexDirection: "column", flex: 1}}>
-                    <Text style={{padding: 5, color: "white", fontSize: 15, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{libraryItem.name}</Text>
-                    <Text style={{padding: 5, color: "white", fontSize: 10, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{detailString}</Text>
-                </View>
+            <View style={[styles.libraryItem, {backgroundColor: (isSelected ? "#1DB954" : styles.libraryItem.backgroundColor)}]}>
+                <LibraryItemInfo libraryItem={libraryItem}/>
                 <Image style={{width: 25, height: 25}} source={(isSelected ? radioSelected : radioUnselected)}/>
             </View>
         </Pressable>
-    )
+    );
+}
+
+function LibraryItemInfo({ libraryItem })
+{
+    const detailString = libraryItem.type + " • " +  (libraryItem.type == "Playlist" ? libraryItem.owner : libraryItem.artists.join(", "));
+
+    return (
+        <View style={{flex: 1, flexDirection: "row",  alignItems: "center",}}>
+            <Image style={{width: 70, height: 70, borderRadius: 5}} source={{uri: libraryItem.imageUrl}}/>
+            <View style={{padding: 10, flexDirection: "column", flex: 1}}>
+                <Text style={{padding: 5, color: "white", fontSize: 15, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{libraryItem.name}</Text>
+                <Text style={{padding: 5, color: "white", fontSize: 10, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{detailString}</Text>
+            </View>
+        </View>
+    );
 }

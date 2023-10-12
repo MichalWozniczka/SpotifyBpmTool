@@ -4,10 +4,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export class SpotifyWebAuthTokenManager
 {
-    async InitSpotifyWebAuthTokenManagerAsync()
+    async InitSpotifyWebAuthTokenManagerAsync(scopes)
     {
         console.log("Initializing auth token manager");
-        return await this.RequestAuthTokenAsync();
+        return await this.RequestAuthTokenAsync(scopes);
     }
 
     async GetAuthTokenAsync()
@@ -20,10 +20,10 @@ export class SpotifyWebAuthTokenManager
         return this.CodeVerifier;
     }
 
-    async RequestAuthTokenAsync()
+    async RequestAuthTokenAsync(scopes)
     {
         console.log("Attempting auth token request");
-        const request = await this.GenerateAuthTokenRequestAsync().catch(() => null);
+        const request = await this.GenerateAuthTokenRequestAsync(scopes).catch(() => null);
 
         console.log("Prompting user");
         const result = await request?.promptAsync({ useProxy: true });
@@ -46,13 +46,8 @@ export class SpotifyWebAuthTokenManager
         return true;
     }
     
-    async GenerateAuthTokenRequestAsync()
+    async GenerateAuthTokenRequestAsync(scopes)
     {
-        const scopes = [ "user-library-read", 
-            "user-modify-playback-state",
-            "user-read-playback-state",
-            "user-read-private" ]; 
-
         const authRequestOptions = {
             usePKCE: true,
             responseType: AuthSession.ResponseType.Code,

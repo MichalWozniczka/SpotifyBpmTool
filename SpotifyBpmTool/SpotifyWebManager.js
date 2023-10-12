@@ -6,6 +6,36 @@ import { Track } from "./LibraryItem"
 
 export class SpotifyWebManager
 {
+    async CreateAndPopulatePlaylistFromTracksAsync(name, ids)
+    {
+        console.log("Creating playlist with name " + name + " from track ids " + ids);
+
+        // Get user id
+        console.log("Getting user id");
+        let userInfoResponse = await this.ExecuteWebRequestAsync("/me", "GET");
+        let userInfoResponseJson = await userInfoResponse.json();
+        let userId = userInfoResponseJson.id;
+
+        // Create playlist
+        console.log("Creating empty playlist");
+        let playlistCreateResponse = await this.ExecuteWebRequestAsync("/users/" + userId + "/playlists", "POST", {name: name});
+        let playlistCreateResponseJson = await playlistCreateResponse.json();
+        let playlistId = playlistCreateResponseJson.id;
+
+        // Add tracks to playlist
+        console.log("Adding items to playlist");
+        let remaining = 0;
+        let limit = 100;
+        let offset = 0;
+        do
+        {
+            let trackBatch = ids.slice(offset, offset + limit).map(id => "spotify:track:" + id);
+            await this.ExecuteWebRequestAsync("/playlists/" + playlistId + "/tracks", "POST", {uris: trackBatch});
+            offset += limit;
+            remaining = ids.length - offset;
+        } while (remaining > 0);
+    }
+    
     async GetUsersSavedAlbumsAsync()
     {
         let items = await this.GetItemsFromApiCallAsync("/me/albums");
@@ -92,8 +122,22 @@ export class SpotifyWebManager
             tracks = tracks.concat(newTracks);
         }
 
+        // Get rid of duplicates
+        let idSet = new Set();
+        let uniqueTracks = [];
+
+        for(let i = 0; i < tracks.length; ++i)
+        {
+            let track = tracks[i];
+            if(!idSet.has(track.id))
+            {
+                uniqueTracks.push(track);
+                idSet.add(track.id);
+            }
+        }
+
         console.log("Tracks retrieved");
-        return tracks;
+        return uniqueTracks;
     }
 
     async GetItemsFromApiCallAsync(path)
@@ -140,7 +184,6 @@ export class SpotifyWebManager
 
             offset += limit;
             remaining = trackIds.length - offset;
-            console.log(remaining);
         } while (remaining > 0);
 
         console.log("Track tempos retrieved");
@@ -185,14 +228,43 @@ export class SpotifyWebManager
     async ExecuteWebRequestAsync(path, method, body = undefined)
     {
         let accessToken = await this.AccessTokenManager.GetAccessTokenAsync();
-        console.log("Executing web request: " + method + " " + path);
+        console.log("Executing web request: " + method + " " + path + " Body: " + JSON.stringify(body));
         const options = {
             method: method,
             headers: this.GetWebRequestHeaders(accessToken),
             body: (body === undefined ? undefined : JSON.stringify(body)),
         };
 
-        const response = await fetch(SpotifyConfig.ApiUrl + path, options);
+        let retry = true;
+        let statusCode;
+        let response;
+        let retryCount = 0;
+        let retryLimit = 10;
+        let retryDelay = 500;
+
+        // Retry until success
+        while(retry)
+        {
+            retry = false;
+
+            response = await fetch(SpotifyConfig.ApiUrl + path, options);
+
+            statusCode = response.status;
+            if(retryCount < retryLimit && (statusCode < 200 || statusCode >= 300))
+            {
+                retry = true;
+                ++retryCount;
+                console.log("Web request failed. Retry count: " + retryCount);
+
+                // sleep to delay retry
+                await new Promise(r => setTimeout(r, retryDelay));
+            }
+            else if(retryCount >= retryLimit)
+            {
+                throw new Error("Exceeded retry count when executing web request in SpotifyWebManager");
+            }
+        }
+
         return response;
     } 
 

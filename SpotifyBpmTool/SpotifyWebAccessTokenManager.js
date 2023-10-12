@@ -8,10 +8,26 @@ export class SpotifyWebAccessTokenManager
     async InitSpotifyWebAccessTokenManagerAsync(refreshOnly = false)
     {
         console.log("Initializing access token manager");
+        
+        let scopesString = this.Scopes.join(",");
+        let storedScopesString = await AsyncStorage.getItem(this.ScopesStorageKey);
+        if(scopesString != storedScopesString)
+        {
+            console.log("Permission scopes changed. Forcing auth token init.");
+            refreshOnly = false;
+            await AsyncStorage.removeItem(this.RefreshTokenStorageKey);
+        }
+
         this.Initialized = await this.RefreshOrInitAccessTokenAsync(refreshOnly);
+
+        
+        if(scopesString != storedScopesString)
+        {
+            await AsyncStorage.setItem(this.ScopesStorageKey, scopesString);
+        }
+
         return this.Initialized;
     }
-
     async GetAccessTokenAsync()
     {
         if(this.IsExpired())
@@ -82,7 +98,7 @@ export class SpotifyWebAccessTokenManager
     {
         console.log("Attempting to acquire access token via auth token request");
         const authTokenManager = new SpotifyWebAuthTokenManager();
-        const authTokenInitResult = await authTokenManager.InitSpotifyWebAuthTokenManagerAsync();
+        const authTokenInitResult = await authTokenManager.InitSpotifyWebAuthTokenManagerAsync(this.Scopes);
         if(!authTokenInitResult)
         {
             return null;
@@ -109,5 +125,12 @@ export class SpotifyWebAccessTokenManager
     ExpirationTime;
     RefreshToken;
     RefreshTokenStorageKey = "RefreshTokenStorageKey";
+    ScopesStorageKey = "Scopes";
     Initialized = false;
+
+    Scopes = [ "user-library-read", 
+        "user-modify-playback-state",
+        "user-read-playback-state",
+        "user-read-private",
+        "playlist-modify-public" ];
 }
