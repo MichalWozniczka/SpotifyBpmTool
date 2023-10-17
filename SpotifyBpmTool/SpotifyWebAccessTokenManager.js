@@ -9,7 +9,7 @@ export class SpotifyWebAccessTokenManager
     {
         console.log("Initializing access token manager");
         
-        let scopesString = this.Scopes.join(",");
+        let scopesString = SpotifyConfig.Scopes.join(",");
         let storedScopesString = await AsyncStorage.getItem(this.ScopesStorageKey);
         if(scopesString != storedScopesString)
         {
@@ -98,7 +98,7 @@ export class SpotifyWebAccessTokenManager
     {
         console.log("Attempting to acquire access token via auth token request");
         const authTokenManager = new SpotifyWebAuthTokenManager();
-        const authTokenInitResult = await authTokenManager.InitSpotifyWebAuthTokenManagerAsync(this.Scopes);
+        const authTokenInitResult = await authTokenManager.InitSpotifyWebAuthTokenManagerAsync(SpotifyConfig.Scopes);
         if(!authTokenInitResult)
         {
             return null;
@@ -108,7 +108,7 @@ export class SpotifyWebAccessTokenManager
         const accessRequestOptions = {
             clientId: SpotifyConfig.ClientId,
             code: authToken,
-            redirectUri: AuthSession.makeRedirectUri(),
+            redirectUri: SpotifyConfig.RedirectUri,
             extraParams: {
                 grant_type: "authorization_code",
                 code_verifier: await authTokenManager.GetCodeVerifierAsync(),
@@ -127,10 +127,4 @@ export class SpotifyWebAccessTokenManager
     RefreshTokenStorageKey = "RefreshTokenStorageKey";
     ScopesStorageKey = "Scopes";
     Initialized = false;
-
-    Scopes = [ "user-library-read", 
-        "user-modify-playback-state",
-        "user-read-playback-state",
-        "user-read-private",
-        "playlist-modify-public" ];
 }

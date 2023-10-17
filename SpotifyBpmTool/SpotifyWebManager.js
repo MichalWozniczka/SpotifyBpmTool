@@ -85,8 +85,6 @@ export class SpotifyWebManager
         {
             let uri = uris[i];
             let [type, id] = uri.split(":");
-            let newTracks;
-            let items;
             let countryCode = await this.GetCountryCodeAsync();
             switch(type)
             {
@@ -197,18 +195,25 @@ export class SpotifyWebManager
 
     async ResumePlaybackAsync()
     {
-        await this.PlayAsync();
+        return await this.PlayAsync();
     }
 
     async PlayTracksAsync(uriTrackList)
     {
-        await this.PlayAsync({ uris: uriTrackList });
+        return await this.PlayAsync({ uris: uriTrackList });
     }
 
     async PlayAsync(body)
     {
         const deviceId = await this.GetDefaultDeviceIdAsync(); 
-        await this.ExecuteWebRequestAsync("/me/player/play?device_id=" + deviceId, "PUT", body);
+        if(!!deviceId)
+        {
+            return false;
+        }
+
+        let response = await this.ExecuteWebRequestAsync("/me/player/play?device_id=" + deviceId, "PUT", body);
+        let statusCode = response.status;
+        return !(statusCode < 200 || statusCode >= 300);
     }
 
     async GetDefaultDeviceIdAsync()
@@ -227,7 +232,14 @@ export class SpotifyWebManager
             activeDevice = deviceList[0];
         }
 
-        return activeDevice.id;
+        return activeDevice?.id;
+    }
+
+    async GetNowPlayingTrackIdAsync()
+    {
+        let countryCode = await this.GetCountryCodeAsync();
+        const response = await this.ExecuteWebRequestAsync("/me/player?market=" + countryCode, "GET");
+        return (await response.json()).item?.id;
     }
 
     async ExecuteWebRequestAsync(path, method, body = undefined)

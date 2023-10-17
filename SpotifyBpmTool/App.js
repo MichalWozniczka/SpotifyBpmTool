@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ActivityIndicator, FlatList, Image, Pressable, SectionList, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, Pressable, StatusBar, Text, TextInput, View } from "react-native";
 import { SpotifyWebManager } from "./SpotifyWebManager";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -14,22 +14,25 @@ const spotifyWebManager = new SpotifyWebManager();
 export default function App() 
 {
     return (
-        <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-                <Stack.Screen
-                    name="Login"
-                    component={LoginScreen}
-                />
-                <Stack.Screen 
-                    name="Playlist" 
-                    component={PlaylistScreen} 
-                />
-                <Stack.Screen 
-                    name="LibrarySelect" 
-                    component={LibrarySelectScreen} 
-                />
-            </Stack.Navigator>
-        </NavigationContainer>
+        <View style={{flex: 1}}>
+            <StatusBar backgroundColor="#141414" barStyle="light-content"/>
+            <NavigationContainer>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    <Stack.Screen
+                        name="Login"
+                        component={LoginScreen}
+                    />
+                    <Stack.Screen 
+                        name="Playlist" 
+                        component={PlaylistScreen} 
+                    />
+                    <Stack.Screen 
+                        name="LibrarySelect" 
+                        component={LibrarySelectScreen} 
+                    />
+                </Stack.Navigator>
+            </NavigationContainer>
+        </View>
     );
 }
 
@@ -70,9 +73,9 @@ function LoginScreen({ navigation, route })
     }, [loginComplete]);
 
     return (
-        <View style={{flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#212020",}}>
+        <View style={{flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#212020"}}>
             <Pressable style={{margin: 20, padding: 20, backgroundColor: "#1DB954", borderRadius: 40, borderWidth: 1, borderColor: 'rgba(158, 150, 150, 0)',}} onPress={() => loginSpotifyWebManager()}>
-                <Text style={{color: "white", fontSize: 30, textAlign: "center",}}>Connect to Spotify</Text>
+                <Text style={{color: "white", fontSize: 30, textAlign: "center", fontWeight: "bold"}}>Connect to Spotify</Text>
             </Pressable>
         </View>
     );
@@ -244,10 +247,10 @@ function PlaylistScreen({ navigation, route })
 
     useEffect(() => {
         setPlaylistToSaveLength(getUnexcludedTracksSortedAndFilteredByTempo().length);
-    }, [tracksFetched, tempoLowerLimit, tempoUpperLimit, excludedTracksCount]);
+    }, [tracksFetched, tempoLowerLimit, tempoUpperLimit, excludedTracksCount, allowDoubleTempo]);
     
-    const textStyle = {margin: 5, color: "white", fontSize: 20 };
-    const textInputStyle = {margin: 5, color: "white", height: 25, width: 35, textAlign: "center", borderWidth: 1, backgroundColor: "#2e2e2e", borderRadius: 3, borderColor: (areTempoLimitsValid() ? "white" : "red")};
+    const textStyle = {margin: 5, color: "white", fontSize: 15 };
+    const textInputStyle = {margin: 5, color: "white", height: 20, width: 35, textAlign: "center", borderWidth: 1, backgroundColor: "#2e2e2e", borderRadius: 3, borderColor: (areTempoLimitsValid() ? "white" : "red")};
     const rightArrow = require("./assets/right-arrow.png");
     const leftArrow = require("./assets/left-arrow.png");
     const checkboxOn = require("./assets/checkboxOn.png");
@@ -255,10 +258,9 @@ function PlaylistScreen({ navigation, route })
 
     return (
         <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
-            <View style={{height: 20}}/>
             <View style={{marginTop: 20, marginLeft: 10, marginRight: 10, padding: 10, flex: 1}}>
                 <View style={{paddingBottom: 8}}>
-                    <Text style={{color: "white", fontSize: 30}}>Filter By Tempo</Text>
+                    <Text style={styles.header}>Filter By Tempo</Text>
                     <View style={{flexDirection: "row", alignItems: "center"}}>
                         <Text style={textStyle}>Lower:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoLowerLimitChanged}/>
                         <Text style={textStyle}>Upper:</Text><TextInput style={textInputStyle} inputMode="numeric" placeholder="0" placeholderTextColor="#bdbdbd" onChangeText={onTempoUpperLimitChanged}/>
@@ -280,7 +282,7 @@ function PlaylistScreen({ navigation, route })
                     </Pressable>
                     <View style={{flex: 1}}/>
                     <Pressable style={{flexDirection: "row", alignItems: "center"}} onPress={() => onSavePlaylistDialogShow()}>
-                        {playlistToSaveLength == 0 ? undefined : <Text style={{color: "white", fontSize: 15, textAlign: "right"}}>Save as{"\n"}Spotify playlist</Text>}
+                        {playlistToSaveLength == 0 ? undefined : <Text style={{color: "white", fontSize: 12, textAlign: "right"}}>Save {playlistToSaveLength} track{playlistToSaveLength == 1 ? "" : "s"}{"\n"}as Spotify playlist</Text>}
                         <View style={{flexDirection: "column", marginLeft: 5}}>
                             <View style={{flex: 1}}/>
                             {playlistToSaveLength == 0 ? undefined : <Image style={{width: 25, height: 25}} source={rightArrow}/>}
@@ -289,7 +291,7 @@ function PlaylistScreen({ navigation, route })
                 </View>
             </View>
             <Dialog.Container visible={savePlaylistDialogVisible} onBackdropPress={onSavePlaylistDialogCancel} onRequestClose={onSavePlaylistDialogCancel}>
-                <Dialog.Title>Name Your Playlist</Dialog.Title>
+                <Dialog.Title style={{color: "#737373"}}>Name Your Playlist</Dialog.Title>
                 <Dialog.Input onChangeText={onSavePlaylistDialogNameUpdated}/>
                 <Dialog.Button color="#1DB954" label="Cancel" onPress={onSavePlaylistDialogCancel}/>
                 <Dialog.Button color="#1DB954" label="Save to Spotify" onPress={onSavePlaylistDialogSave}/>
@@ -458,9 +460,8 @@ function LibrarySelectScreen({ navigation, route })
                     navigation.navigate("Playlist", { selectedItems: selectedItemsArray });
                 }
             }>
-            <Text style={{alignSelf: "center", color: "white", fontSize: 30}}>{selectedCount} item{(selectedCount > 1 ? "s" : "")}</Text>
+            <Text style={{color: "white", fontSize: 15}}>{selectedCount} item{(selectedCount > 1 ? "s" : "")}</Text>
             <View style={{flexDirection: "column", marginLeft: 5}}>
-                <View style={{flex: 1}}/>
                 <Image style={{width: 25, height: 25}} source={rightArrow}/>
             </View>
         </Pressable>)
@@ -468,9 +469,8 @@ function LibrarySelectScreen({ navigation, route })
 
     return (
         <View style={{backgroundColor: "#212121", flex: 1, flexDirection: "column"}}>
-            <View style={{height: 20}}/>
             <View style={{marginTop: 20, marginLeft: 10, marginRight: 10, padding: 10, flex: 1}}>
-                <Text style={{color: "white", fontSize: 30}}>Select Library</Text>
+                <Text style={styles.header}>Select From Library</Text>
                 <View style={{flexDirection: "row", paddingBottom: 5}}>
                     <FilterLibraryButton name={albumsName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(albumsName)}/>
                     <FilterLibraryButton name={playlistsName} ToggleSectionFunction={ToggleSectionFunction} isToggled={!filteredSections.has(playlistsName)}/>
@@ -489,8 +489,8 @@ function LibrarySelectScreen({ navigation, route })
 function FilterLibraryButton({ name, ToggleSectionFunction, isToggled })
 {
     return (
-        <Pressable style={{margin: 10, padding: 8, backgroundColor: (isToggled ? "#1DB954" : "rgba(158, 150, 150, 0)"), borderRadius: 20, borderWidth: 1, borderColor: "#1DB954",}} onPress={() => ToggleSectionFunction(name)}>
-            <Text style={{color: (isToggled ? "white" : "#1DB954"), fontSize: 15, textAlign: "center",}}>{name}</Text>
+        <Pressable style={{margin: 10, paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, backgroundColor: (isToggled ? "#1DB954" : "rgba(158, 150, 150, 0)"), borderRadius: 20, borderWidth: 1, borderColor: "#1DB954",}} onPress={() => ToggleSectionFunction(name)}>
+            <Text style={{color: (isToggled ? "white" : "#1DB954"), fontSize: 12, textAlign: "center",}}>{name}</Text>
         </Pressable>
     );
 }
@@ -498,8 +498,8 @@ function FilterLibraryButton({ name, ToggleSectionFunction, isToggled })
 function LibraryPlaylistItem({ libraryItem, ToggleExcludedTrackFunction, excluded })
 {
     const [isExcluded, setIsExcluded] = useState(excluded);
-    const hiddenIcon = require("./assets/hidden.png");
-    const visibleIcon = require("./assets/visible.png");
+    const hiddenIcon = require("./assets/unhide.png");
+    const visibleIcon = require("./assets/hide.png");
     const itemDetails = <View style={{flex: 1, flexDirection: "row",  alignItems: "center",}}>
         <LibraryItemInfo libraryItem={libraryItem}/>
         <View style={{padding: 10, flexDirection: "column", justifyContent: "center", alignItems: "center"}}>
@@ -512,7 +512,7 @@ function LibraryPlaylistItem({ libraryItem, ToggleExcludedTrackFunction, exclude
         <View style={styles.libraryItem}>
             {isExcluded ? <Text style={{padding: 5, color: "#bdbdbd", fontSize: 10, flex: 1, fontStyle: "italic"}}>Excluded</Text> : itemDetails}
             <Pressable style={{marginLeft: "auto"}} onPress={() => {ToggleExcludedTrackFunction(!isExcluded, libraryItem.id); setIsExcluded(!isExcluded)}}>
-                <Image style={{width: 25, height: 25}} source={(isExcluded ? hiddenIcon : visibleIcon)}/>
+                <Image style={{width: 15, height: 15}} source={(isExcluded ? hiddenIcon : visibleIcon)}/>
             </Pressable>
         </View>
     );
@@ -543,7 +543,7 @@ function LibraryItemInfo({ libraryItem })
         <View style={{flex: 1, flexDirection: "row",  alignItems: "center",}}>
             <Image style={{width: 70, height: 70, borderRadius: 5}} source={{uri: libraryItem.imageUrl}}/>
             <View style={{padding: 10, flexDirection: "column", flex: 1}}>
-                <Text style={{padding: 5, color: "white", fontSize: 15, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{libraryItem.name}</Text>
+                <Text style={{padding: 5, color: "white", fontSize: 15, flex: 1, fontWeight: "bold"}} numberOfLines={1} ellipsizeMode="tail">{libraryItem.name}</Text>
                 <Text style={{padding: 5, color: "white", fontSize: 10, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{detailString}</Text>
             </View>
         </View>

@@ -54,7 +54,7 @@ export class SpotifyWebAuthTokenManager
             clientId: SpotifyConfig.ClientId,
             scopes: scopes,
             prompt: AuthSession.Prompt.None,
-            redirectUri: AuthSession.makeRedirectUri(),
+            redirectUri: SpotifyConfig.RedirectUri,
         };
         
         const discovery = { authorizationEndpoint: SpotifyConfig.AuthUrl };

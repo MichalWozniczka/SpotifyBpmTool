@@ -21,11 +21,17 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.michalwozniczka.SpotifyBpmTool"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "spotifybpmtool"
+    "scheme": "spotifybpmtool",
+    "extra": {
+      "eas": {
+        "projectId": "95aeb6db-d913-4566-9e12-1ef57ce4aaf0"
+      }
+    }
   }
 }

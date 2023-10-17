@@ -9,4 +9,9 @@ export const styles = StyleSheet.create ({
         alignItems: "center",
         backgroundColor: "#2e2e2e",
     },
+    header: {
+        color: "white", 
+        fontSize: 25, 
+        fontWeight: "bold"
+    }
 });
