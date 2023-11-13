@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ActivityIndicator, FlatList, Image, Pressable, StatusBar, Text, TextInput, View } from "react-native";
 import { SpotifyWebManager } from "./SpotifyWebManager";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, useIsFocused } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { styles } from "./StyleSheet";
 import { LibraryItem } from "./LibraryItem";
@@ -40,17 +40,41 @@ function LoginScreen({ navigation, route })
 {
     const [acceptedConnectWithoutLogin, setAcceptedConnectWithoutLogin] = useState(false);
     const [loginComplete, setLoginComplete] = useState(false);
+    const [requestFailedDialogVisible, setRequestFailedDialogVisible] = useState(false);
+    const isFocused = useIsFocused();
 
     async function acceptConnectSpotifyWebManagerWithoutLogin()
     {
         setAcceptedConnectWithoutLogin(true);
-        const loginSuccessful = await spotifyWebManager.AttemptConnectWithoutLoginAsync();
+
+        let loginSuccessful;
+        try
+        {
+            loginSuccessful = await spotifyWebManager.AttemptConnectWithoutLoginAsync();
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
+
         setLoginComplete(loginSuccessful);
     }
 
     async function loginSpotifyWebManager()
     {
-        const loginSuccessful = await spotifyWebManager.LoginAsync();
+        
+        let loginSuccessful;
+        try
+        {
+            loginSuccessful = await spotifyWebManager.LoginAsync();
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
+        
         setLoginComplete(loginSuccessful);
         if(loginComplete)
         {
@@ -58,25 +82,40 @@ function LoginScreen({ navigation, route })
         }
     }
 
+    function onRequestFailedDialogDismissFunction()
+    {
+        setRequestFailedDialogVisible(false);
+    }
+
+    function onRequestFailedDialogRefreshFunction()
+    {
+        setRequestFailedDialogVisible(false);
+        console.log("App refresh requested. Navigating back to login screen.") ;
+        navigation.navigate("Login");
+    }
+
     useEffect(() => {
-        if(!acceptedConnectWithoutLogin)
+        if(!acceptedConnectWithoutLogin && isFocused)
         {
             acceptConnectSpotifyWebManagerWithoutLogin();
         }
-    }, []);
+    }, [isFocused]);
 
     useEffect(() => {
         if(loginComplete)
         {
+            setAcceptedConnectWithoutLogin(false);
+            setLoginComplete(false);
             navigation.navigate("LibrarySelect");
         }
     }, [loginComplete]);
 
     return (
         <View style={{flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#212020"}}>
-            <Pressable style={{margin: 20, padding: 20, backgroundColor: "#1DB954", borderRadius: 40, borderWidth: 1, borderColor: 'rgba(158, 150, 150, 0)',}} onPress={() => loginSpotifyWebManager()}>
+            <Pressable style={{margin: 20, padding: 30, backgroundColor: "#1DB954", borderRadius: 50, borderWidth: 1, borderColor: 'rgba(158, 150, 150, 0)',}} onPress={() => loginSpotifyWebManager()}>
                 <Text style={{color: "white", fontSize: 30, textAlign: "center", fontWeight: "bold"}}>Connect to Spotify</Text>
             </Pressable>
+            <RequestFailedDialog isVisible={requestFailedDialogVisible} OnRequestFailedDialogDismissFunction={onRequestFailedDialogDismissFunction} OnRequestFailedDialogRefreshFunction={onRequestFailedDialogRefreshFunction}/>
         </View>
     );
 }
@@ -93,6 +132,7 @@ function PlaylistScreen({ navigation, route })
     const [excludedTracksCount, setExcludedTracksCount] = useState(0);
     const [playlistToSaveLength, setPlaylistToSaveLength] = useState(0);
     const [allowDoubleTempo, setAllowDoubleTempo] = useState(false);
+    const [requestFailedDialogVisible, setRequestFailedDialogVisible] = useState(false);
 
     // Default is a loading spinner. Will update to scrollview once items are loaded from API
     const [libraryItemListOrLoad, setLibraryItemListOrLoad] = useState(<View style={{flex: 1, justifyContent: "center"}}><ActivityIndicator color="#1DB954" size="large" /></View>);
@@ -132,7 +172,16 @@ function PlaylistScreen({ navigation, route })
         console.log("Saving playlist with name " + savePlaylistName + " to Spotify");
         setSavePlaylistDialogVisible(false);
         let trackIds = getUnexcludedTracksSortedAndFilteredByTempo().map(track => track.id);
-        await spotifyWebManager.CreateAndPopulatePlaylistFromTracksAsync(savePlaylistName, trackIds);
+        
+        try
+        {
+            await spotifyWebManager.CreateAndPopulatePlaylistFromTracksAsync(savePlaylistName, trackIds);
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
     }
 
     function onSavePlaylistDialogNameUpdated(name)
@@ -149,6 +198,18 @@ function PlaylistScreen({ navigation, route })
         }
         console.log("Showing name playlist dialog");
         setSavePlaylistDialogVisible(true);
+    }
+
+    function onRequestFailedDialogDismissFunction()
+    {
+        setRequestFailedDialogVisible(false);
+    }
+
+    function onRequestFailedDialogRefreshFunction()
+    {
+        setRequestFailedDialogVisible(false);
+        console.log("App refresh requested. Navigating back to login screen.") ;
+        navigation.navigate("Login");
     }
 
     function areTempoLimitsValid()
@@ -177,10 +238,30 @@ function PlaylistScreen({ navigation, route })
     async function GetTracksWithInfo()
     {
         console.log("Getting tracks and populating bpm from item list " + route.params.selectedItems);
-        let trackItems = await spotifyWebManager.GetTracksFromUrisAsync(route.params.selectedItems);
+
+        let trackItems;
+        try
+        {
+            trackItems = await spotifyWebManager.GetTracksFromUrisAsync(route.params.selectedItems);
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
 
         let trackIdArray = trackItems.map(track => track.id);
-        let idToTempoMap = await spotifyWebManager.GetTrackTemposAsync(trackIdArray);
+
+        let idToTempoMap;
+        try
+        {
+            idToTempoMap = await spotifyWebManager.GetTrackTemposAsync(trackIdArray);
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
 
         console.log("Updating existing track items with fetched tempos");
         for(let i = 0; i < trackItems.length; ++i)
@@ -296,6 +377,7 @@ function PlaylistScreen({ navigation, route })
                 <Dialog.Button color="#1DB954" label="Cancel" onPress={onSavePlaylistDialogCancel}/>
                 <Dialog.Button color="#1DB954" label="Save to Spotify" onPress={onSavePlaylistDialogSave}/>
             </Dialog.Container>
+            <RequestFailedDialog isVisible={requestFailedDialogVisible} OnRequestFailedDialogDismissFunction={onRequestFailedDialogDismissFunction} OnRequestFailedDialogRefreshFunction={onRequestFailedDialogRefreshFunction}/>
         </View>
     );
 }
@@ -323,10 +405,22 @@ function LibrarySelectScreen({ navigation, route })
 
     // Nothing by default. This button will show once we have selected items
     const [nextButton, setNextButton] = useState(undefined);
+    
+    const [requestFailedDialogVisible, setRequestFailedDialogVisible] = useState(false);
 
     async function GetAlbums()
     {
-        let albumItems = await spotifyWebManager.GetUsersSavedAlbumsAsync();
+        let albumItems;
+        try
+        {
+            albumItems = await spotifyWebManager.GetUsersSavedAlbumsAsync();
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
+
         albumItems = albumItems.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 );
         setAlbums(albumItems);
         setAlbumsFetched(true);
@@ -334,7 +428,17 @@ function LibrarySelectScreen({ navigation, route })
     
     async function GetPlaylists()
     {
-        let playlistItems = await spotifyWebManager.GetUsersSavedPlaylistsAsync();
+        let playlistItems;
+        try
+        {
+            playlistItems = await spotifyWebManager.GetUsersSavedPlaylistsAsync();
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
+
         playlistItems = playlistItems.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 )
         setPlaylists(playlistItems);
         setPlaylistsFetched(true);
@@ -342,7 +446,17 @@ function LibrarySelectScreen({ navigation, route })
     
     async function GetTracks()
     {
-        let trackItems = await spotifyWebManager.GetUsersSavedTracksAsync();
+        let trackItems;
+        try
+        {
+            trackItems = await spotifyWebManager.GetUsersSavedTracksAsync();
+        }
+        catch(error)
+        {
+            setRequestFailedDialogVisible(true);
+            return;
+        }
+
         trackItems.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 );
         setTracks(trackItems);
         setTracksFetched(true);
@@ -392,6 +506,18 @@ function LibrarySelectScreen({ navigation, route })
         }
 
         setSelectedCount(selectedItems.current.size);
+    }
+
+    function onRequestFailedDialogDismissFunction()
+    {
+        setRequestFailedDialogVisible(false);
+    }
+
+    function onRequestFailedDialogRefreshFunction()
+    {
+        setRequestFailedDialogVisible(false);
+        console.log("App refresh requested. Navigating back to login screen.") ;
+        navigation.navigate("Login");
     }
 
     // Run immediately to fetch items via web API
@@ -482,6 +608,7 @@ function LibrarySelectScreen({ navigation, route })
                     {nextButton}
                 </View>
             </View>
+            <RequestFailedDialog isVisible={requestFailedDialogVisible} OnRequestFailedDialogDismissFunction={onRequestFailedDialogDismissFunction} OnRequestFailedDialogRefreshFunction={onRequestFailedDialogRefreshFunction}/>
         </View>
     );
 }
@@ -547,5 +674,17 @@ function LibraryItemInfo({ libraryItem })
                 <Text style={{padding: 5, color: "white", fontSize: 10, flex: 1}} numberOfLines={1} ellipsizeMode="tail">{detailString}</Text>
             </View>
         </View>
+    );
+}
+
+function RequestFailedDialog({ isVisible, OnRequestFailedDialogDismissFunction, OnRequestFailedDialogRefreshFunction })
+{
+    return (
+        <Dialog.Container visible={isVisible} onBackdropPress={OnRequestFailedDialogDismissFunction} onRequestClose={OnRequestFailedDialogDismissFunction}>
+            <Dialog.Title style={{color: "#737373"}}>We've encountered an error</Dialog.Title>
+            <Dialog.Description style={{color: "#737373"}}>We are unable to contact the Spotify servers at this time. Would you like to refresh the app and try again?</Dialog.Description>
+            <Dialog.Button color="#1DB954" label="Cancel" onPress={OnRequestFailedDialogDismissFunction}/>
+            <Dialog.Button color="#1DB954" label="Okay" onPress={OnRequestFailedDialogRefreshFunction}/>
+        </Dialog.Container>
     );
 }

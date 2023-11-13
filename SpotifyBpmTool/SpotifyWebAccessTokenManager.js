@@ -14,7 +14,7 @@ export class SpotifyWebAccessTokenManager
         if(scopesString != storedScopesString)
         {
             console.log("Permission scopes changed. Forcing auth token init.");
-            refreshOnly = false;
+            //refreshOnly = false;
             await AsyncStorage.removeItem(this.RefreshTokenStorageKey);
         }
 

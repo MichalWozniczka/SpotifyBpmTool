@@ -256,8 +256,9 @@ export class SpotifyWebManager
         let statusCode;
         let response;
         let retryCount = 0;
-        let retryLimit = 10;
-        let retryDelay = 500;
+        const retryLimit = 10;
+        let retryDelay = 200;
+        const backoffFactor = 1.5;
 
         // Retry until success
         while(retry)
@@ -275,6 +276,7 @@ export class SpotifyWebManager
 
                 // sleep to delay retry
                 await new Promise(r => setTimeout(r, retryDelay));
+                retryDelay *= backoffFactor;
             }
             else if(retryCount >= retryLimit)
             {
